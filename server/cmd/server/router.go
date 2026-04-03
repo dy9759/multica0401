@@ -231,6 +231,41 @@ func NewRouter(pool *pgxpool.Pool, hub *realtime.Hub, bus *events.Bus) chi.Route
 				r.Get("/{runtimeId}/update/{updateId}", h.GetUpdate)
 			})
 
+			// Messaging (AgentMesh integration)
+			messageHandler := handler.NewMessageHandler()
+			channelHandler := handler.NewChannelHandler()
+			sessionHandler := handler.NewSessionHandler()
+
+			r.Route("/api/messages", func(r chi.Router) {
+				r.Post("/", messageHandler.Create)
+				r.Get("/", messageHandler.List)
+				r.Get("/conversations", messageHandler.ListConversations)
+			})
+
+			r.Route("/api/channels", func(r chi.Router) {
+				r.Post("/", channelHandler.Create)
+				r.Get("/", channelHandler.List)
+				r.Route("/{channelID}", func(r chi.Router) {
+					r.Get("/", channelHandler.Get)
+					r.Post("/join", channelHandler.Join)
+					r.Post("/leave", channelHandler.Leave)
+					r.Get("/members", channelHandler.ListMembers)
+					r.Get("/messages", channelHandler.ListMessages)
+				})
+			})
+
+			r.Route("/api/sessions", func(r chi.Router) {
+				r.Post("/", sessionHandler.Create)
+				r.Get("/", sessionHandler.List)
+				r.Route("/{sessionID}", func(r chi.Router) {
+					r.Get("/", sessionHandler.Get)
+					r.Patch("/", sessionHandler.Update)
+					r.Post("/join", sessionHandler.Join)
+					r.Get("/messages", sessionHandler.ListMessages)
+					r.Get("/summary", sessionHandler.Summary)
+				})
+			})
+
 			// Inbox
 			r.Route("/api/inbox", func(r chi.Router) {
 				r.Get("/", h.ListInbox)

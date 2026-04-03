@@ -1,0 +1,23 @@
+-- name: CreateMessage :one
+INSERT INTO message (workspace_id, sender_id, sender_type, channel_id, recipient_id, recipient_type, session_id, content, content_type, file_id, file_name, file_size, file_content_type, metadata)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+RETURNING *;
+
+-- name: GetMessage :one
+SELECT * FROM message WHERE id = $1;
+
+-- name: ListChannelMessages :many
+SELECT * FROM message WHERE channel_id = $1 ORDER BY created_at ASC LIMIT $2 OFFSET $3;
+
+-- name: ListDMMessages :many
+SELECT * FROM message
+WHERE workspace_id = $1
+  AND ((sender_id = $2 AND sender_type = $3 AND recipient_id = $4 AND recipient_type = $5)
+    OR (sender_id = $4 AND sender_type = $5 AND recipient_id = $2 AND recipient_type = $3))
+ORDER BY created_at ASC LIMIT $6 OFFSET $7;
+
+-- name: ListSessionMessages :many
+SELECT * FROM message WHERE session_id = $1 ORDER BY created_at ASC LIMIT $2 OFFSET $3;
+
+-- name: UpdateMessageStatus :exec
+UPDATE message SET status = $2, updated_at = NOW() WHERE id = $1;

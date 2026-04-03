@@ -1,0 +1,32 @@
+-- name: CreateChannel :one
+INSERT INTO channel (workspace_id, name, description, created_by, created_by_type)
+VALUES ($1, $2, $3, $4, $5)
+RETURNING *;
+
+-- name: GetChannel :one
+SELECT * FROM channel WHERE id = $1;
+
+-- name: GetChannelByName :one
+SELECT * FROM channel WHERE workspace_id = $1 AND name = $2;
+
+-- name: ListChannels :many
+SELECT * FROM channel WHERE workspace_id = $1 ORDER BY created_at ASC;
+
+-- name: DeleteChannel :exec
+DELETE FROM channel WHERE id = $1;
+
+-- name: AddChannelMember :exec
+INSERT INTO channel_member (channel_id, member_id, member_type)
+VALUES ($1, $2, $3)
+ON CONFLICT DO NOTHING;
+
+-- name: RemoveChannelMember :exec
+DELETE FROM channel_member WHERE channel_id = $1 AND member_id = $2 AND member_type = $3;
+
+-- name: ListChannelMembers :many
+SELECT * FROM channel_member WHERE channel_id = $1;
+
+-- name: GetChannelsForMember :many
+SELECT c.* FROM channel c
+JOIN channel_member cm ON c.id = cm.channel_id
+WHERE cm.member_id = $1 AND cm.member_type = $2;
