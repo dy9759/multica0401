@@ -53,6 +53,8 @@ func NewRouter(pool *pgxpool.Pool, hub *realtime.Hub, bus *events.Bus) chi.Route
 	cfSigner := auth.NewCloudFrontSignerFromEnv()
 	h := handler.New(queries, pool, hub, bus, emailSvc, s3, cfSigner)
 	h.AutoReplyService = service.NewAutoReplyService(queries, hub)
+	h.PlanGenerator = service.NewPlanGeneratorService(queries)
+	h.Scheduler = service.NewSchedulerService(queries, hub)
 
 	r := chi.NewRouter()
 
@@ -276,6 +278,30 @@ func NewRouter(pool *pgxpool.Pool, hub *realtime.Hub, bus *events.Bus) chi.Route
 					r.Post("/join", h.JoinSession)
 					r.Get("/messages", h.ListSessionMessages)
 					r.Get("/summary", h.SessionSummary)
+				})
+			})
+
+			// Plans
+			r.Route("/api/plans", func(r chi.Router) {
+				r.Post("/", h.CreatePlan)
+				r.Get("/", h.ListPlans)
+				r.Route("/{planID}", func(r chi.Router) {
+					r.Get("/", h.GetPlan)
+					r.Delete("/", h.DeletePlan)
+				})
+			})
+
+			// Workflows
+			r.Route("/api/workflows", func(r chi.Router) {
+				r.Post("/", h.CreateWorkflow)
+				r.Get("/", h.ListWorkflows)
+				r.Route("/{workflowID}", func(r chi.Router) {
+					r.Get("/", h.GetWorkflow)
+					r.Patch("/status", h.UpdateWorkflowStatus)
+					r.Patch("/dag", h.UpdateWorkflowDAG)
+					r.Delete("/", h.DeleteWorkflow)
+					r.Get("/steps", h.ListWorkflowSteps)
+					r.Post("/start", h.StartWorkflow)
 				})
 			})
 

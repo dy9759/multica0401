@@ -44,6 +44,8 @@ type Handler struct {
 	Storage          *storage.S3Storage
 	CFSigner         *auth.CloudFrontSigner
 	AutoReplyService *service.AutoReplyService
+	PlanGenerator    *service.PlanGeneratorService
+	Scheduler        *service.SchedulerService
 }
 
 func New(queries *db.Queries, txStarter txStarter, hub *realtime.Hub, bus *events.Bus, emailService *service.EmailService, s3 *storage.S3Storage, cfSigner *auth.CloudFrontSigner) *Handler {

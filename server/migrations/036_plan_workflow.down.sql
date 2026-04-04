@@ -1,0 +1,3 @@
+DROP TABLE IF EXISTS workflow_step;
+DROP TABLE IF EXISTS workflow;
+DROP TABLE IF EXISTS plan;

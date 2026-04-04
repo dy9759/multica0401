@@ -297,6 +297,21 @@ type PersonalAccessToken struct {
 	CreatedAt   pgtype.Timestamptz `json:"created_at"`
 }
 
+type Plan struct {
+	ID             pgtype.UUID        `json:"id"`
+	WorkspaceID    pgtype.UUID        `json:"workspace_id"`
+	Title          string             `json:"title"`
+	Description    pgtype.Text        `json:"description"`
+	SourceType     pgtype.Text        `json:"source_type"`
+	SourceRefID    pgtype.UUID        `json:"source_ref_id"`
+	Constraints    pgtype.Text        `json:"constraints"`
+	ExpectedOutput pgtype.Text        `json:"expected_output"`
+	Steps          []byte             `json:"steps"`
+	CreatedBy      pgtype.UUID        `json:"created_by"`
+	CreatedAt      pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt      pgtype.Timestamptz `json:"updated_at"`
+}
+
 type RuntimeUsage struct {
 	ID               pgtype.UUID        `json:"id"`
 	RuntimeID        pgtype.UUID        `json:"runtime_id"`
@@ -384,6 +399,39 @@ type VerificationCode struct {
 	Used      bool               `json:"used"`
 	CreatedAt pgtype.Timestamptz `json:"created_at"`
 	Attempts  int32              `json:"attempts"`
+}
+
+type Workflow struct {
+	ID          pgtype.UUID        `json:"id"`
+	PlanID      pgtype.UUID        `json:"plan_id"`
+	WorkspaceID pgtype.UUID        `json:"workspace_id"`
+	Title       string             `json:"title"`
+	Status      string             `json:"status"`
+	Type        string             `json:"type"`
+	CronExpr    pgtype.Text        `json:"cron_expr"`
+	Version     int32              `json:"version"`
+	Dag         []byte             `json:"dag"`
+	CreatedBy   pgtype.UUID        `json:"created_by"`
+	CreatedAt   pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt   pgtype.Timestamptz `json:"updated_at"`
+}
+
+type WorkflowStep struct {
+	ID               pgtype.UUID        `json:"id"`
+	WorkflowID       pgtype.UUID        `json:"workflow_id"`
+	StepOrder        int32              `json:"step_order"`
+	Description      string             `json:"description"`
+	AgentID          pgtype.UUID        `json:"agent_id"`
+	FallbackAgentIds []pgtype.UUID      `json:"fallback_agent_ids"`
+	RequiredSkills   []string           `json:"required_skills"`
+	TimeoutMs        pgtype.Int8        `json:"timeout_ms"`
+	RetryCount       pgtype.Int4        `json:"retry_count"`
+	DependsOn        []pgtype.UUID      `json:"depends_on"`
+	Status           string             `json:"status"`
+	StartedAt        pgtype.Timestamptz `json:"started_at"`
+	CompletedAt      pgtype.Timestamptz `json:"completed_at"`
+	Result           []byte             `json:"result"`
+	Error            pgtype.Text        `json:"error"`
 }
 
 type Workspace struct {

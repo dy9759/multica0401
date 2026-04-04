@@ -1,0 +1,174 @@
+package handler
+
+import (
+	"encoding/json"
+	"log/slog"
+	"net/http"
+	"strconv"
+
+	"github.com/go-chi/chi/v5"
+	"github.com/jackc/pgx/v5/pgtype"
+	db "github.com/multica-ai/multica/server/pkg/db/generated"
+)
+
+// PlanResponse is the JSON response for a plan.
+type PlanResponse struct {
+	ID             string          `json:"id"`
+	WorkspaceID    string          `json:"workspace_id"`
+	Title          string          `json:"title"`
+	Description    *string         `json:"description"`
+	SourceType     *string         `json:"source_type"`
+	SourceRefID    *string         `json:"source_ref_id"`
+	Constraints    *string         `json:"constraints"`
+	ExpectedOutput *string         `json:"expected_output"`
+	Steps          json.RawMessage `json:"steps"`
+	CreatedBy      string          `json:"created_by"`
+	CreatedAt      string          `json:"created_at"`
+	UpdatedAt      string          `json:"updated_at"`
+}
+
+func planToResponse(p db.Plan) PlanResponse {
+	return PlanResponse{
+		ID:             uuidToString(p.ID),
+		WorkspaceID:    uuidToString(p.WorkspaceID),
+		Title:          p.Title,
+		Description:    textToPtr(p.Description),
+		SourceType:     textToPtr(p.SourceType),
+		SourceRefID:    uuidToPtr(p.SourceRefID),
+		Constraints:    textToPtr(p.Constraints),
+		ExpectedOutput: textToPtr(p.ExpectedOutput),
+		Steps:          p.Steps,
+		CreatedBy:      uuidToString(p.CreatedBy),
+		CreatedAt:      timestampToString(p.CreatedAt),
+		UpdatedAt:      timestampToString(p.UpdatedAt),
+	}
+}
+
+type CreatePlanRequest struct {
+	Title          string          `json:"title"`
+	Description    *string         `json:"description"`
+	SourceType     *string         `json:"source_type"`
+	SourceRefID    *string         `json:"source_ref_id"`
+	Constraints    *string         `json:"constraints"`
+	ExpectedOutput *string         `json:"expected_output"`
+	Steps          json.RawMessage `json:"steps"`
+}
+
+func (h *Handler) CreatePlan(w http.ResponseWriter, r *http.Request) {
+	var req CreatePlanRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+	if req.Title == "" {
+		writeError(w, http.StatusBadRequest, "title is required")
+		return
+	}
+
+	workspaceID := resolveWorkspaceID(r)
+	userID, ok := requireUserID(w, r)
+	if !ok {
+		return
+	}
+
+	steps := req.Steps
+	if steps == nil {
+		steps = []byte("[]")
+	}
+
+	plan, err := h.Queries.CreatePlan(r.Context(), db.CreatePlanParams{
+		WorkspaceID:    parseUUID(workspaceID),
+		Title:          req.Title,
+		Description:    ptrToText(req.Description),
+		SourceType:     ptrToText(req.SourceType),
+		SourceRefID:    optionalUUID(req.SourceRefID),
+		Constraints:    ptrToText(req.Constraints),
+		ExpectedOutput: ptrToText(req.ExpectedOutput),
+		Steps:          steps,
+		CreatedBy:      parseUUID(userID),
+	})
+	if err != nil {
+		slog.Error("failed to create plan", "error", err)
+		writeError(w, http.StatusInternalServerError, "failed to create plan")
+		return
+	}
+
+	actorType, actorID := h.resolveActor(r, userID, workspaceID)
+	h.publish("plan.created", workspaceID, actorType, actorID, map[string]string{
+		"plan_id": uuidToString(plan.ID),
+	})
+
+	writeJSON(w, http.StatusCreated, planToResponse(plan))
+}
+
+func (h *Handler) GetPlan(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "planID")
+	plan, err := h.Queries.GetPlan(r.Context(), parseUUID(id))
+	if err != nil {
+		writeError(w, http.StatusNotFound, "plan not found")
+		return
+	}
+	writeJSON(w, http.StatusOK, planToResponse(plan))
+}
+
+func (h *Handler) ListPlans(w http.ResponseWriter, r *http.Request) {
+	workspaceID := resolveWorkspaceID(r)
+
+	limit := 50
+	offset := 0
+	if l := r.URL.Query().Get("limit"); l != "" {
+		if v, err := strconv.Atoi(l); err == nil {
+			limit = v
+		}
+	}
+	if o := r.URL.Query().Get("offset"); o != "" {
+		if v, err := strconv.Atoi(o); err == nil {
+			offset = v
+		}
+	}
+
+	plans, err := h.Queries.ListPlans(r.Context(), db.ListPlansParams{
+		WorkspaceID: parseUUID(workspaceID),
+		Limit:       int32(limit),
+		Offset:      int32(offset),
+	})
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to list plans")
+		return
+	}
+
+	resp := make([]PlanResponse, len(plans))
+	for i, p := range plans {
+		resp[i] = planToResponse(p)
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"plans": resp, "total": len(resp)})
+}
+
+func (h *Handler) DeletePlan(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "planID")
+	userID, ok := requireUserID(w, r)
+	if !ok {
+		return
+	}
+	workspaceID := resolveWorkspaceID(r)
+
+	if err := h.Queries.DeletePlan(r.Context(), parseUUID(id)); err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to delete plan")
+		return
+	}
+
+	actorType, actorID := h.resolveActor(r, userID, workspaceID)
+	h.publish("plan.deleted", workspaceID, actorType, actorID, map[string]string{
+		"plan_id": id,
+	})
+
+	writeJSON(w, http.StatusOK, map[string]string{"status": "deleted"})
+}
+
+// optionalUUID converts an optional string pointer to a pgtype.UUID.
+func optionalUUID(s *string) pgtype.UUID {
+	if s == nil || *s == "" {
+		return pgtype.UUID{}
+	}
+	return parseUUID(*s)
+}
